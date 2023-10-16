@@ -5,10 +5,10 @@ import os
 import paramiko
 
 # SSH连接参数
-hostname = '192.168.137.48'
+hostname = '192.168.2.1'
 port = 22
-username = 'liwenjia'
-password = '13778178983lwj.'
+username = 'username'
+password = '8888'
 
 # 本地文件路径
 black_local_path = 'black_file.txt'
