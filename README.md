@@ -1,7 +1,7 @@
 # yolo_track_counting
 This project uses code from the [mikel-brostrom's Open Source Project:yolo_tracking](https://github.com/mikel-brostrom/yolo_tracking).
 Special thanks to the contributors and maintainers for their valuable work.
-结合摄像头和机器视觉技术，使用了 YOLO  目标检测深度模型来识别鱼类，并借助多目标跟踪算法来追踪这些目标。捕获到计数信息将自动发送控制信号给嵌入式单片机，进行必要的干预和控制。
+结合摄像头和机器视觉技术，使用了 YOLO  目标检测深度模型来识别鱼类，并借助多目标跟踪算法来追踪这些目标。捕获到计数信息将自动发送控制信号给嵌入式单片机，进行必要的干预和控制。  
 配置依赖：  
  ```
 pip install -r requirements.txt  # install dependencies
