@@ -11,7 +11,7 @@ pip install -r requirements.txt  # install dependencies
 https://pypi.org/project/paramiko/
 如果出差错，可以查看下方博客指导手动安装：
 python36之paramiko模块安装 - 流年似水zlw - 博客园 [(cnblogs.com)](https://www.cnblogs.com/zlw-xyz/p/12889212.html)https://www.cnblogs.com/zlw-xyz/p/12889212.html  
-**可以使用拉流地址或者本地视频文件。
+**可以使用拉流地址或者本地视频文件。  
 输入测试视频：video/inputVid
 输出结果：video/outputVid
 碰线检测实现目标追踪的计数效果**
