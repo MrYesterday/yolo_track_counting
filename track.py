@@ -43,7 +43,7 @@ from trackers.multi_tracker_zoo import create_tracker
 
 
 @torch.no_grad()
-def run(
+def run(  # 所有输入参数
         source='0',
         yolo_weights=WEIGHTS / 'yolov5m.pt',  # model.pt path(s),
         reid_weights=WEIGHTS / 'osnet_x0_25_msmt17.pt',  # model.pt path,
@@ -75,20 +75,20 @@ def run(
         hide_class=False,  # hide IDs
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
-        vid_stride=1,  # video frame-rate stride
+        vid_stride=1,  # video frame-rate stride 帧速率步长，默认逐帧
         retina_masks=False,
 ):
 
-    source = str(source)
-    save_img = not nosave and not source.endswith('.txt')  # save inference images
+    source = str(source) # 读取数据源位置为字符串
+    save_img = not nosave and not source.endswith('.txt')  # save inference images 允许保存文件、源文件不是txt文件
     is_file = Path(source).suffix[1:] in (VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
     webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
-    if is_url and is_file:
+    if is_url and is_file: # 如果是一个url / 一个包含链接txt文件 下载这个视频
         source = check_file(source)  # download
 
     # Directories
-    if not isinstance(yolo_weights, list):  # single yolo model
+    if not isinstance(yolo_weights, list):  # single yolo model 不是list
         exp_name = yolo_weights.stem
     elif type(yolo_weights) is list and len(yolo_weights) == 1:  # single models after --yolo_weights
         exp_name = Path(yolo_weights[0]).stem
@@ -134,6 +134,7 @@ def run(
     tracker_list = []
     for i in range(bs):
         tracker = create_tracker(tracking_method, tracking_config, reid_weights, device, half)
+        # strongSort None 超参数 产生与数据集个数匹配的追踪器列表
         tracker_list.append(tracker, )
         if hasattr(tracker_list[i], 'model'):
             if hasattr(tracker_list[i].model, 'warmup'):
@@ -144,31 +145,33 @@ def run(
     #model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup
     seen, windows, dt = 0, [], (Profile(), Profile(), Profile(), Profile())
     curr_frames, prev_frames = [None] * bs, [None] * bs
-    for frame_idx, batch in enumerate(dataset):
+    for frame_idx, batch in enumerate(dataset):  # 启动追踪器处理数据集每一帧
         path, im, im0s, vid_cap, s = batch
+        # 是否可视化特征图
         visualize = increment_path(save_dir / Path(path[0]).stem, mkdir=True) if visualize else False
+        # 视频图像整型数据转浮点
         with dt[0]:
-            im = torch.from_numpy(im).to(device)
+            im = torch.from_numpy(im).to(device)  # 根据设备调整图像设备位置
             im = im.half() if half else im.float()  # uint8 to fp16/32
-            im /= 255.0  # 0 - 255 to 0.0 - 1.0
+            im /= 255.0  # 0 - 255 to 0.0 - 1.0 转浮点
             if len(im.shape) == 3:
                 im = im[None]  # expand for batch dim
-
+        # 模型接口调用，输入视频图像数据，获得对应视频张量输出
         # Inference
         with dt[1]:
             preds = model(im, augment=augment, visualize=visualize)
 
-        # Apply NMS
+        # Apply NMS 非极大值抑制，保留极大值元素
         with dt[2]:
             if is_seg:
                 masks = []
                 p = non_max_suppression(preds[0], conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det, nm=32)
                 proto = preds[1][-1]
-            else:
+            else: # 对输出的张量进行非极大值抑制
                 p = non_max_suppression(preds, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
-            
-        # Process detections
-        for i, det in enumerate(p):  # detections per image
+
+        # Process detections 数据集探测结果逐帧处理
+        for i, det in enumerate(p):  # detections per image 对所有路径进行处理
             seen += 1
             if webcam:  # bs >= 1
                 p, im0, _ = path[i], im0s[i].copy(), dataset.count
@@ -180,11 +183,11 @@ def run(
                 p, im0, _ = path, im0s.copy(), getattr(dataset, 'frame', 0)
                 p = Path(p)  # to Path
                 # video file
-                if source.endswith(VID_FORMATS):
+                if source.endswith(VID_FORMATS): # 源是视频文件
                     txt_file_name = p.stem
                     save_path = str(save_dir / p.name)  # im.jpg, vid.mp4, ...
                 # folder with imgs
-                else:
+                else: # 其他类型文件 获取其父文件夹
                     txt_file_name = p.parent.name  # get folder name containing current img
                     save_path = str(save_dir / p.parent.name)  # im.jpg, vid.mp4, ...
             curr_frames[i] = im0
@@ -194,12 +197,12 @@ def run(
             imc = im0.copy() if save_crop else im0  # for save_crop
 
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
-            
+            # 新建一个解释器
             if hasattr(tracker_list[i], 'tracker') and hasattr(tracker_list[i].tracker, 'camera_update'):
-                if prev_frames[i] is not None and curr_frames[i] is not None:  # camera motion compensation
+                if prev_frames[i] is not None and curr_frames[i] is not None:  # camera motion compensation 不是第一帧就进行补偿
                     tracker_list[i].tracker.camera_update(prev_frames[i], curr_frames[i])
 
-            if det is not None and len(det):
+            if det is not None and len(det):  # 如果画面中有bbox，检测不为空，处理所有检测结果框
                 if is_seg:
                     shape = im0.shape
                     # scale bbox first the crop masks
@@ -217,13 +220,14 @@ def run(
                     n = (det[:, 5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                # pass detections to strongsort
-                with dt[3]:
+                # pass detections to strongsort 把预测结果交给strongsort
+                # 如果画面中有bbox
+                with dt[3]:  # 更新当前追踪物体列表
                     outputs[i] = tracker_list[i].update(det.cpu(), im0)
-                
-                # draw boxes for visualization
+
+                # draw boxes for visualization 可视化矩形框
                 if len(outputs[i]) > 0:
-                    
+
                     if is_seg:
                         # Mask plotting
                         annotator.masks(
@@ -232,16 +236,16 @@ def run(
                             im_gpu=torch.as_tensor(im0, dtype=torch.float16).to(device).permute(2, 0, 1).flip(0).contiguous() /
                             255 if retina_masks else im[i]
                         )
-                    
+
                     for j, (output) in enumerate(outputs[i]):
-                        
-                        bbox = output[0:4]
+
+                        bbox = output[0:4]  # YOLO矩形框参数
                         id = output[4]
                         cls = output[5]
                         conf = output[6]
 
                         if save_txt:
-                            # to MOT format
+                            # to MOT format YOLO矩形框各个参数
                             bbox_left = output[0]
                             bbox_top = output[1]
                             bbox_w = output[2] - output[0]
@@ -256,20 +260,20 @@ def run(
                             id = int(id)  # integer id
                             label = None if hide_labels else (f'{id} {names[c]}' if hide_conf else \
                                 (f'{id} {conf:.2f}' if hide_class else f'{id} {names[c]} {conf:.2f}'))
-                            color = colors(c, True)
-                            annotator.box_label(bbox, label, color=color)
-                            
+                            color = colors(c, True) # 设置标签
+                            annotator.box_label(bbox, label, color=color) # 解释器对该帧进行bbox标注
+
                             if save_trajectories and tracking_method == 'strongsort':
                                 q = output[7]
                                 tracker_list[i].trajectory(im0, q, color=color)
                             if save_crop:
                                 txt_file_name = txt_file_name if (isinstance(path, list) and len(path) > 1) else ''
                                 save_one_box(np.array(bbox, dtype=np.int16), imc, file=save_dir / 'crops' / txt_file_name / names[c] / f'{id}' / f'{p.stem}.jpg', BGR=True)
-                            
+
             else:
                 pass
                 #tracker_list[i].tracker.pred_n_update_all_tracks()
-                
+
             # Stream results
             im0 = annotator.result()
             if show_vid:
@@ -297,13 +301,13 @@ def run(
                     vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 vid_writer[i].write(im0)
 
-            prev_frames[i] = curr_frames[i]
-            
+            prev_frames[i] = curr_frames[i] # 当前帧作为前一帧
+
         # Print total time (preprocessing + inference + NMS + tracking)
         LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{sum([dt.dt for dt in dt if hasattr(dt, 'dt')]) * 1E3:.1f}ms")
 
     # Print results
-    t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
+    t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image 帧速率
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS, %.1fms {tracking_method} update per image at shape {(1, 3, *imgsz)}' % t)
     if save_txt or save_vid:
         s = f"\n{len(list((save_dir / 'tracks').glob('*.txt')))} tracks saved to {save_dir / 'tracks'}" if save_txt else ''
@@ -314,11 +318,11 @@ def run(
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--yolo-weights', nargs='+', type=Path, default=WEIGHTS / 'yolov8s-seg.pt', help='model.pt path(s)')
+    parser.add_argument('--yolo-weights', nargs='+', type=Path, default='D:/Desktop/ultralytics/runs/segment/train/weights/best.pt', help='model.pt path(s)')
     parser.add_argument('--reid-weights', type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt')
     parser.add_argument('--tracking-method', type=str, default='bytetrack', help='strongsort, ocsort, bytetrack')
     parser.add_argument('--tracking-config', type=Path, default=None)
-    parser.add_argument('--source', type=str, default='0', help='file/dir/URL/glob, 0 for webcam')  
+    parser.add_argument('--source', type=str, default='D:/Desktop/pythonProject/v2.mp4', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='NMS IoU threshold')
@@ -329,8 +333,9 @@ def parse_opt():
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
     parser.add_argument('--save-trajectories', action='store_true', help='save trajectories for each track')
-    parser.add_argument('--save-vid', action='store_true', help='save video tracking results')
-    parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
+    parser.add_argument('--save-vid', default=True, help='save video tracking results')
+    # parser.add_argument('--save-vid', action='store_true', help='save video tracking results')
+    parser.add_argument('--nosave', default='store_true', help='do not save images/videos')
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
